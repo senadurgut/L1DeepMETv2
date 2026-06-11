@@ -22,9 +22,9 @@ LOSS_PT_THRESHOLD: 50     # GeV, before dividing by SCALE_MOMENTUM
 
 # optimization
 N_EPOCHS: 100
-BATCH_SIZE: 6
-LEARNING_RATE: 0.00001    # AdamW lr / CyclicLR base_lr
-MAX_LR: 0.0001            # CyclicLR max_lr
+BATCH_SIZE: 128
+LEARNING_RATE: 0.0001     # AdamW lr / CyclicLR base_lr
+MAX_LR: 0.001             # CyclicLR max_lr
 WEIGHT_DECAY: 0.001
 VALIDATION_SPLIT: 0.2
 

@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch_scatter import scatter_add
 from model.dynamic_reduction_network import DynamicReductionNetwork
 from model.graph_met_network import GraphMETNetwork
+from model.graph_met_network_edge_features import GraphMETNetworkEdgeFeatures
 
 '''
 
@@ -17,18 +18,25 @@ Change from DeepMETv2
 '''
 
 class Net(nn.Module):
-    def __init__(self, continuous_dim, categorical_dim, norm):
+    def __init__(self, continuous_dim, categorical_dim, norm, hidden_dim=32, conv_depth=4, activation='relu', use_edge_features=False):
         super(Net, self).__init__()
-        
-        self.graphnet = GraphMETNetwork(continuous_dim, categorical_dim, norm,
-                                        output_dim=1, hidden_dim=32,
-                                        conv_depth=4)
-    
+
+        self.activation = activation
+        if use_edge_features:
+            self.graphnet = GraphMETNetworkEdgeFeatures(continuous_dim, categorical_dim, norm,
+                                                        output_dim=1, hidden_dim=hidden_dim,
+                                                        conv_depth=conv_depth, use_edge_features=True)
+        else:
+            self.graphnet = GraphMETNetwork(continuous_dim, categorical_dim, norm,
+                                            output_dim=1, hidden_dim=hidden_dim,
+                                            conv_depth=conv_depth)
+
     def forward(self, x_cont, x_cat, edge_index, batch):
         weights = self.graphnet(x_cont, x_cat, edge_index, batch)
+        if self.activation == 'sigmoid':
+            return torch.sigmoid(weights)
         relu_layer = nn.ReLU()
         return relu_layer(weights)
-        #return torch.sigmoid(weights)
 
 # tensor operations
 def getdot(vx, vy):
@@ -63,7 +71,7 @@ def loss_fn(weights, particles_vis, genMET, batch, scale_momentum = 1.):
 
 
 # loss function with response tune
-def loss_fn_response_tune(weights, particles_vis, genMET, batch, c = 5000, scale_momentum = 1.):
+def loss_fn_response_tune(weights, particles_vis, genMET, batch, c = 5000, scale_momentum = 1., pt_threshold = 50.):
     # particles_vis: (pT, px, py, eta, phi, puppiWeight, pdgId, charge)
     # momentum of the visible particles
     px = particles_vis[:,1]
@@ -89,7 +97,7 @@ def loss_fn_response_tune(weights, particles_vis, genMET, batch, c = 5000, scale
     response = getscale(v_regressed) / getscale(v_true) # ratio of the MET scale
 
     #pT_thres = 0.         # calculate response only taking into account for events with genMET above threshold
-    pT_thres = 50./scale_momentum
+    pT_thres = pt_threshold/scale_momentum
     resp_pos = torch.logical_and(response > 1., getscale(v_true) > pT_thres)
     resp_neg = torch.logical_and(response < 1., getscale(v_true) > pT_thres)
     

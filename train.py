@@ -15,6 +15,7 @@ from tqdm import tqdm
 import argparse
 import functools
 import re
+import time
 import yaml
 from glob import glob
 import utils
@@ -56,7 +57,7 @@ def train(model, device, optimizer, scheduler, loss_fn, dataloader):
     loss_avg_arr = []
     loss_avg = utils.RunningAverage()
 
-    with tqdm(total=len(dataloader)) as t:
+    with tqdm(total=len(dataloader), disable=True) as t:
         for data in dataloader:
             optimizer.zero_grad()
             data = data.to(device)
@@ -84,7 +85,6 @@ def train(model, device, optimizer, scheduler, loss_fn, dataloader):
             t.update()
     
     scheduler.step(np.mean(loss_avg_arr))
-    print('Training epoch: {:02d}, MSE: {:.4f}'.format(epoch, np.mean(loss_avg_arr)))
 
     return np.mean(loss_avg_arr)
 
@@ -190,13 +190,12 @@ if __name__ == '__main__':
         with open(osp.join(model_dir, 'metrics_val_best.json')) as restore_metrics:
             best_validation_loss = json.load(restore_metrics)['loss']
             
-    # Train 
+    # Train
+    n_steps = len(train_dl)
     for epoch in range(first_epoch+1, epochs):
-        print('Current best loss:', best_validation_loss)
-        if '_last_lr' in scheduler.state_dict():
-            print('Learning rate:', scheduler.state_dict()['_last_lr'][0])
+        print('Epoch {}/{}'.format(epoch, epochs-1), flush=True)
+        epoch_start = time.time()
 
-        # compute number of batches in one epoch (one full pass over the training set)
         train_loss = train(model, device, optimizer, scheduler, loss_fn, train_dl)
 
         # Save weights
@@ -217,6 +216,10 @@ if __name__ == '__main__':
         # test_metrics, resolution_hists, MET_arr = evaluate(model, device, loss_fn, test_dl, metrics, deltaR, deltaR_dz, model_dir, epoch, save_METarr = False)
 
         validation_loss = test_metrics['loss']
+        elapsed = time.time() - epoch_start
+        last_lr = scheduler.state_dict().get('_last_lr', [float('nan')])[0]
+        print('{n}/{n} - {t:.0f}s - {ms:.0f}ms/step - loss: {tl:.4f} - val_loss: {vl:.4f} - learning_rate: {lr:.4g}'.format(
+            n=n_steps, t=elapsed, ms=1000.0*elapsed/max(n_steps, 1), tl=train_loss, vl=validation_loss, lr=last_lr), flush=True)
         loss_log.write('%d,%.8f,%.8f\n'%(epoch, train_loss, validation_loss))
         loss_log.flush()
         is_best = (validation_loss<=best_validation_loss)
