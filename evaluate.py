@@ -6,8 +6,10 @@ import os.path as osp
 import os
 import time
 
+import functools
 import numpy as np
 import json
+import yaml
 import torch
 from torch.autograd import Variable
 
@@ -34,10 +36,10 @@ Change from DeepMETv2
 parser = argparse.ArgumentParser()
 parser.add_argument('--restore_file', default='best', help="name of the file in --model_dir \
                      containing weights to load")
-parser.add_argument('--data', default='data',
-                    help="Name of the data folder")
+parser.add_argument('--data', default='data_ttbar',
+                    help="Dataset root folder (PyG reads its processed/ subfolder)")
 parser.add_argument('--ckpts', default='ckpts',
-                    help="Name of the ckpts folder")
+                    help="Path to the run folder (e.g. ckpts/config1_run0) holding config.yaml and the checkpoints")
 parser.add_argument('--batch_size', default=6,
                     help="Batch size")
 parser.add_argument('--lr', default=0.01,
@@ -50,7 +52,7 @@ n_features_cat = 2
 
 scale_momentum = 128
 
-def evaluate(model, device, loss_fn, dataloader, metrics, deltaR, deltaR_dz, model_dir, epoch, n_features_cont = 6, save_METarr = False, removePuppi = False):
+def evaluate(model, device, loss_fn, dataloader, metrics, deltaR, deltaR_dz, model_dir, epoch, n_features_cont = 6, scale_momentum = 128, save_METarr = False, removePuppi = False):
     """Evaluate the model on `num_steps` batches.
 
     Args:
@@ -146,7 +148,7 @@ def evaluate(model, device, loss_fn, dataloader, metrics, deltaR, deltaR_dz, mod
         #toc = time.time()
         #print('Event processing speed', toc - tic)
 
-        loss = loss_fn(result, data.x, data.y, data.batch, scale_momentum)
+        loss = loss_fn(result, data.x, data.y, data.batch, scale_momentum=scale_momentum)
 
         # compute all metrics on this batch
         resolutions, METs, weights_pdgId, puppi_weights_pdgId = metrics['resolution'](result, data.x, data.y, data.batch, scale_momentum)
@@ -243,27 +245,50 @@ if __name__ == '__main__':
     # Load the parameters
     args = parser.parse_args()
 
+    model_dir = osp.join(os.environ['PWD'],args.ckpts)
+
+    # load the config snapshot saved alongside the checkpoints
+    with open(osp.join(model_dir, 'config.yaml'), 'r') as f:
+        config = yaml.safe_load(f)
+
+    n_features_cont   = int(config['N_FEATURES_CONT'])
+    n_features_cat    = int(config['N_FEATURES_CAT'])
+    scale_momentum    = int(config['SCALE_MOMENTUM'])
+    deltaR            = float(config['DELTA_R'])
+    hidden_dim        = int(config['HIDDEN_DIM'])
+    conv_depth        = int(config['CONV_DEPTH'])
+    activation        = config.get('ACTIVATION_FUNCTION', 'relu')
+    loss_type         = config.get('LOSS_TYPE', 'response_tune')
+    loss_c            = float(config.get('LOSS_C', 5000.))
+    loss_pt_threshold = float(config.get('LOSS_PT_THRESHOLD', 50.))
+    learning_rate     = float(config.get('LEARNING_RATE', 1e-5))
+    max_lr            = float(config.get('MAX_LR', 1e-4))
+    weight_decay      = float(config.get('WEIGHT_DECAY', 0.001))
+    batch_size        = int(config.get('BATCH_SIZE', 6))
+    validation_split  = float(config.get('VALIDATION_SPLIT', 0.2))
+    use_edge_features = bool(config.get('USE_EDGE_FEATURES', False))
+    deltaR_dz = 0.3
+
     # fetch dataloaders
-    dataloaders = data_loader.fetch_dataloader(data_dir=osp.join(os.environ['PWD'],args.data), 
-                                               batch_size=int(args.batch_size), 
-                                               validation_split=0.2)
+    dataloaders = data_loader.fetch_dataloader(data_dir=osp.join(os.environ['PWD'],args.data),
+                                               batch_size=batch_size,
+                                               validation_split=validation_split)
     test_dl = dataloaders['test']
 
     # Define the model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = net.Net(n_features_cont, n_features_cat).to(device) #include puppi
-    #model = net.Net(n_features_cont-1, n_features_cat).to(device) #remove puppi
-    
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, threshold=0.05)
-    optimizer = torch.optim.AdamW(model.parameters(),lr=float(args.lr), weight_decay=float(args.weight_decay))
-    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr = 1e-4, max_lr = 1e-3)
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, threshold=0.05)
+    norm = torch.tensor([1./scale_momentum, 1./scale_momentum, 1./scale_momentum, 1., 1., 1.]).to(device)
+    model = net.Net(n_features_cont, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features).to(device) #include puppi
 
-    loss_fn = net.loss_fn
+    optimizer = torch.optim.AdamW(model.parameters(),lr=learning_rate, weight_decay=weight_decay)
+    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr = learning_rate, max_lr = max_lr, cycle_momentum=False)
+
+    # loss function
+    if loss_type == 'response_tune':
+        loss_fn = functools.partial(net.loss_fn_response_tune, c=loss_c, pt_threshold=loss_pt_threshold)
+    else:
+        loss_fn = net.loss_fn
     metrics = net.metrics
-    model_dir = osp.join(os.environ['PWD'],args.ckpts)
-    deltaR = 0.4
-    deltaR_dz = 0.3
 
     # Reload weights from the saved file
     restore_ckpt = osp.join(model_dir, args.restore_file + '.pth.tar')
@@ -274,8 +299,8 @@ if __name__ == '__main__':
         best_validation_loss = json.load(restore_metrics)['loss']
 
     # Evaluate
-    test_metrics = evaluate(model, device, loss_fn, test_dl, metrics, deltaR, deltaR_dz, model_dir)
-                            
+    test_metrics, resolutions, MET_arr = evaluate(model, device, loss_fn, test_dl, metrics, deltaR, deltaR_dz, model_dir, epoch, n_features_cont = n_features_cont, scale_momentum = scale_momentum, save_METarr = True)
+
     validation_loss = test_metrics['loss']
     is_best = (validation_loss<best_validation_loss)
     if is_best: 

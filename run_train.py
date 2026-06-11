@@ -1,15 +1,13 @@
 import os
 
-batch_size = 32 # default: 6
-lr = 0.1 # default: 0.01
-weight_decay = 0.001 # default: 0.001
+cfg = 'configs/config1.yaml'
 
 process = 'ttbar'
-ckpts = 'ckpts_{}_batch_{}_lr_{}_wd_{}'.format(process, batch_size, lr, weight_decay)
+ckpts = 'ckpts_{}'.format(process)
 
 os.system('mkdir -p {}'.format(ckpts))
 
-cmd = 'python train.py --data data_{} --ckpts {} --batch_size {} --lr {} --weight_decay {}'.format(process, ckpts, batch_size, lr, weight_decay)
+cmd = 'python train.py --data data_{} --ckpts {} --cfg {}'.format(process, ckpts, cfg)
 
 print(cmd)
 os.system(cmd)
