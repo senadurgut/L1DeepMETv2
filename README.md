@@ -25,19 +25,15 @@ pip install mplhep
 If running on one of the rogue machines (rogue01, rogue02), use micromamba instead of conda. That is, instead of above commands: 
 
 ```
-# 1. Create and activate new environment with python and cudatoolkit 10.2
-micromamba create -n pyg112 python=3.9 cudatoolkit=10.2 -c conda-forge -y
-micromamba activate pyg112
+# 1. Create and activate new environment with python 
+micromamba create -n deepmet python=3.9
+micromamba activate deepmet
 
-# 2. Install PyTorch 1.12.0 + CUDA 10.2 wheels from official PyTorch pip repo
-pip install torch==1.12.0+cu102 torchvision==0.13.0+cu102 torchaudio==0.12.0 \
-  -f https://download.pytorch.org/whl/torch_stable.html
+# 2. Install PyTorch + CUDA 
+pip install torch==2.3.0+cu121 torchvision==0.18.0+cu121 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cu121
 
 # 3. Install PyTorch Geometric extensions 
-pip install torch-scatter==2.1.0+pt112cu102 -f https://pytorch-geometric.com/whl/torch-1.12.0+cu102.html
-pip install torch-sparse==0.6.15+pt112cu102 -f https://pytorch-geometric.com/whl/torch-1.12.0+cu102.html
-pip install torch-cluster==1.6.0+pt112cu102 -f https://pytorch-geometric.com/whl/torch-1.12.0+cu102.html
-pip install torch-spline-conv==1.2.1+pt112cu102 -f https://pytorch-geometric.com/whl/torch-1.12.0+cu102.html
+pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.3.0+cu121.html
 
 # 4. Install torch-geometric meta package 
 pip install torch-geometric
