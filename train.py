@@ -187,8 +187,15 @@ if __name__ == '__main__':
         ckpt = utils.load_checkpoint(restore_ckpt, model, optimizer, scheduler)
         first_epoch = ckpt['epoch']
         print('Restarting training from epoch',first_epoch)
-        with open(osp.join(model_dir, 'metrics_val_best.json')) as restore_metrics:
-            best_validation_loss = json.load(restore_metrics)['loss']
+        # metrics_val_best.json is only written once an epoch fully completes; if the job
+        # died before that (e.g. mid first epoch), fall back to inf so resume still works.
+        best_metrics_path = osp.join(model_dir, 'metrics_val_best.json')
+        if osp.exists(best_metrics_path):
+            with open(best_metrics_path) as restore_metrics:
+                best_validation_loss = json.load(restore_metrics)['loss']
+        else:
+            print('No metrics_val_best.json found; starting best_validation_loss from inf')
+            best_validation_loss = float('inf')
             
     # Train
     n_steps = len(train_dl)
