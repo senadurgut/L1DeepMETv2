@@ -11,6 +11,11 @@ from torch_geometric.nn.conv import GraphConv, EdgeConv, GCNConv, MessagePassing
 from torch_cluster import radius_graph, knn_graph
 
 N_EDGE_FEATURES = 3   # ln(dR), ln(kT), ln(z)
+# Distinct particles can coincide in eta-phi (e.g. a track and its calo deposit), giving
+# dR->0; without a floor the eps clamp sends ln(dR)/ln(kT) to ~-18, a heavy outlier that
+# the (unnormalized) message linear then propagates through max-aggregation. 0.01 rad is
+# well below the 0.4 graph radius, so it only clips the degenerate near-zero tail.
+DR_FLOOR = 1e-2
 
 
 class EdgeFeatureConv(MessagePassing):
@@ -31,6 +36,11 @@ class GraphMETNetworkEdgeFeatures(nn.Module):
 
         self.datanorm = norm
         self.use_edge_features = use_edge_features
+        # ParticleNeXt normalizes edge features before the edge MLP; the raw log-features
+        # have nonzero means and ~2x the std of the BatchNorm'd node embeddings, so without
+        # this they dominate/destabilize the message. Static graph => normalize once.
+        if self.use_edge_features:
+            self.edge_bn = nn.BatchNorm1d(N_EDGE_FEATURES)
 
         self.embed_charge = nn.Embedding(3, hidden_dim//4)
         self.embed_pdgid = nn.Embedding(7, hidden_dim//4)
@@ -77,7 +87,7 @@ class GraphMETNetworkEdgeFeatures(nn.Module):
 
         # wrap phi difference into (-pi, pi]
         dphi = (phi_i - phi_j + math.pi) % (2 * math.pi) - math.pi
-        dr = torch.sqrt((eta_i - eta_j)**2 + dphi**2)
+        dr = torch.sqrt((eta_i - eta_j)**2 + dphi**2).clamp(min=DR_FLOOR)
         ptmin = torch.minimum(pt_i, pt_j)
 
         ln_dr = torch.log(dr.clamp(min=eps))
@@ -92,7 +102,7 @@ class GraphMETNetworkEdgeFeatures(nn.Module):
 
         # edge features use raw (physical) pt, eta, phi -- compute before normalization
         if self.use_edge_features:
-            edge_attr = self.compute_edge_features(x_cont, edge_index)
+            edge_attr = self.edge_bn(self.compute_edge_features(x_cont, edge_index))
 
         x_cont *= self.datanorm
 
