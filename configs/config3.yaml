@@ -1,0 +1,32 @@
+# L1DeepMETv2 training config
+# config3: edge features with BatchNorm normalization + dR floor (fixes the
+#          unnormalized/outlier-prone edge inputs of config2)
+
+# inputs
+N_FEATURES_CONT: 6
+N_FEATURES_CAT: 2
+SCALE_MOMENTUM: 128       # scaling factor of pT, px, py (hence the target MET)
+
+# model
+HIDDEN_DIM: 32
+CONV_DEPTH: 4
+ACTIVATION_FUNCTION: relu # 'relu' or 'sigmoid' (applied to the per-particle weights)
+USE_EDGE_FEATURES: true   # ParticleNeXt-style [ln(dR), ln(kT), ln(z)], now BatchNorm'd
+
+# graph
+DELTA_R: 0.4
+
+# loss
+LOSS_TYPE: response_tune  # 'mse' or 'response_tune'
+LOSS_C: 5000              # response-correction coefficient
+LOSS_PT_THRESHOLD: 50     # GeV, before dividing by SCALE_MOMENTUM
+
+# optimization
+N_EPOCHS: 100
+BATCH_SIZE: 1024
+LEARNING_RATE: 0.00013    # AdamW lr / CyclicLR base_lr; sqrt-scaled from 1e-5 @ batch 6 (x sqrt(1024/6)~13)
+MAX_LR: 0.0013            # CyclicLR max_lr; sqrt-scaled from 1e-4 @ batch 6
+WEIGHT_DECAY: 0.001
+VALIDATION_SPLIT: 0.2
+
+CUSTOM_NOTE: "config2 + edge-feature BatchNorm + dR floor (1e-2)"
