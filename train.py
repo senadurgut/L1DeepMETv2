@@ -18,10 +18,10 @@ import re
 import time
 import yaml
 from glob import glob
-import utils
+from utils import utils
 import model.net as net
 import model.data_loader as data_loader
-from evaluate import evaluate
+from utils.evaluate import evaluate
 import warnings
 warnings.simplefilter('ignore')
 from time import strftime, gmtime
@@ -113,6 +113,7 @@ if __name__ == '__main__':
     batch_size        = int(config.get('BATCH_SIZE', 6))
     validation_split  = float(config.get('VALIDATION_SPLIT', 0.2))
     use_edge_features = bool(config.get('USE_EDGE_FEATURES', False))
+    use_attentive_pooling = bool(config.get('USE_ATTENTIVE_POOLING', False))
 
     # load data
     dataloaders = data_loader.fetch_dataloader(data_dir=osp.join(os.environ['PWD'],args.data),
@@ -131,8 +132,8 @@ if __name__ == '__main__':
     norm = torch.tensor([1./scale_momentum, 1./scale_momentum, 1./scale_momentum, 1., 1., 1.]).to(device)   # pt, px, py: scale by scale_momentum
 
     # model
-    model = net.Net(n_features_cont, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features).to(device) #include puppi
-    #model = net.Net(n_features_cont-1, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features).to(device) #remove puppi
+    model = net.Net(n_features_cont, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features, use_attentive_pooling=use_attentive_pooling).to(device) #include puppi
+    #model = net.Net(n_features_cont-1, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features, use_attentive_pooling=use_attentive_pooling).to(device) #remove puppi
 
     optimizer = torch.optim.AdamW(model.parameters(),lr=learning_rate, weight_decay=weight_decay)
 

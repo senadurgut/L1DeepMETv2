@@ -13,7 +13,7 @@ import yaml
 import torch
 from torch.autograd import Variable
 
-import utils
+from utils import utils
 import model.net as net
 import model.data_loader as data_loader
 
@@ -267,6 +267,7 @@ if __name__ == '__main__':
     batch_size        = int(config.get('BATCH_SIZE', 6))
     validation_split  = float(config.get('VALIDATION_SPLIT', 0.2))
     use_edge_features = bool(config.get('USE_EDGE_FEATURES', False))
+    use_attentive_pooling = bool(config.get('USE_ATTENTIVE_POOLING', False))
     deltaR_dz = 0.3
 
     # fetch dataloaders
@@ -278,7 +279,7 @@ if __name__ == '__main__':
     # Define the model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     norm = torch.tensor([1./scale_momentum, 1./scale_momentum, 1./scale_momentum, 1., 1., 1.]).to(device)
-    model = net.Net(n_features_cont, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features).to(device) #include puppi
+    model = net.Net(n_features_cont, n_features_cat, norm, hidden_dim=hidden_dim, conv_depth=conv_depth, activation=activation, use_edge_features=use_edge_features, use_attentive_pooling=use_attentive_pooling).to(device) #include puppi
 
     optimizer = torch.optim.AdamW(model.parameters(),lr=learning_rate, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr = learning_rate, max_lr = max_lr, cycle_momentum=False)

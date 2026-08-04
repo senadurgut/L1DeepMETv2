@@ -12,6 +12,7 @@ HIDDEN_DIM: 32
 CONV_DEPTH: 4
 ACTIVATION_FUNCTION: relu # 'relu' or 'sigmoid' (applied to the per-particle weights)
 USE_EDGE_FEATURES: true   # ParticleNeXt-style [ln(dR), ln(kT), ln(z)], now BatchNorm'd
+USE_ATTENTIVE_POOLING: false # softmax-weighted edge aggregation (vs hard max)
 
 # graph
 DELTA_R: 0.4

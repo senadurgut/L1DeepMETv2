@@ -11,7 +11,7 @@ Notebook usage:
 
     vg.plot_event(evt, color_by="puppi")          # graph, no edge features
     vg.plot_event(evt, edge_color="ln_kt")        # graph, edges colored by ln(kT)
-    vg.plot_event_comparison(evt, edge_color="ln_kt")   # side-by-side
+    vg.plot_event_comparison(evt, edge_color="ln_kt")   # side-by-side ,
     vg.plot_edge_feature_distributions(ds, n_events=300)
     vg.plot_graph_stats(ds, n_events=500)
 
@@ -159,7 +159,6 @@ def plot_event_comparison(data, deltaR=0.4, color_by="puppi", edge_color="ln_kt"
     plot_event(data, deltaR, color_by, edge_color=None, ax=axes[0], title="Graph (no edge features)")
     plot_event(data, deltaR, color_by, edge_color=edge_color, ax=axes[1],
                title=f"Graph + {EDGE_LABELS.get(edge_color, edge_color)}")
-    fig.tight_layout()
     return fig
 
 

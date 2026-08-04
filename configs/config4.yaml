@@ -1,5 +1,6 @@
 # L1DeepMETv2 training config
-# config2: config1 + ParticleNeXt-style pairwise edge features
+# config4: config3 + ParticleNeXt-style attentive pooling (softmax-weighted edge
+#          aggregation instead of max). Clean A/B vs config3: only the new flag differs.
 
 # inputs
 N_FEATURES_CONT: 6
@@ -10,8 +11,8 @@ SCALE_MOMENTUM: 128       # scaling factor of pT, px, py (hence the target MET)
 HIDDEN_DIM: 32
 CONV_DEPTH: 4
 ACTIVATION_FUNCTION: relu # 'relu' or 'sigmoid' (applied to the per-particle weights)
-USE_EDGE_FEATURES: true   # if true: ParticleNeXt-style [ln(dR), ln(kT), ln(z)] edge features
-USE_ATTENTIVE_POOLING: false # if true: softmax-weighted edge aggregation (vs hard max)
+USE_EDGE_FEATURES: true   # ParticleNeXt-style [ln(dR), ln(kT), ln(z)], BatchNorm'd
+USE_ATTENTIVE_POOLING: true  # softmax-weighted edge aggregation (vs hard max)
 
 # graph
 DELTA_R: 0.4
@@ -23,10 +24,10 @@ LOSS_PT_THRESHOLD: 50     # GeV, before dividing by SCALE_MOMENTUM
 
 # optimization
 N_EPOCHS: 100
-BATCH_SIZE: 6
+BATCH_SIZE: 128
 LEARNING_RATE: 0.00001    # AdamW lr / CyclicLR base_lr
 MAX_LR: 0.0001            # CyclicLR max_lr
 WEIGHT_DECAY: 0.001
 VALIDATION_SPLIT: 0.2
 
-CUSTOM_NOTE: "config1 + ParticleNeXt edge features [ln(dR), ln(kT), ln(z)]"
+CUSTOM_NOTE: "config3 + attentive pooling (softmax edge aggregation)"

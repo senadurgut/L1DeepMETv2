@@ -13,10 +13,10 @@ import torch_geometric.transforms as T
 from torch_geometric.data import DataLoader
 from tqdm import tqdm
 import argparse
-import utils
+from utils import utils
 import model.net as net
 import model.data_loader as data_loader
-from evaluate import evaluate
+from utils.evaluate import evaluate
 import warnings
 warnings.simplefilter('ignore')
 

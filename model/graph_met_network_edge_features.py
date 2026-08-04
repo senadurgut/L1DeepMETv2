@@ -7,6 +7,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from torch_geometric.nn.conv import GraphConv, EdgeConv, GCNConv, MessagePassing
+from torch_geometric.utils import softmax
 
 from torch_cluster import radius_graph, knn_graph
 
@@ -19,23 +20,35 @@ DR_FLOOR = 1e-2
 
 
 class EdgeFeatureConv(MessagePassing):
-    def __init__(self, nn):
-        super(EdgeFeatureConv, self).__init__(aggr='max')
+    def __init__(self, nn, attn_nn=None):
+        # attn_nn is not None -> ParticleNeXt attentive pooling: per-edge score, softmax
+        # over each node's incoming edges, then weighted sum (aggr='add'). Otherwise fall
+        # back to EdgeConv-style hard max aggregation.
+        super(EdgeFeatureConv, self).__init__(aggr='add' if attn_nn is not None else 'max')
         self.nn = nn
+        self.attn_nn = attn_nn
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index, edge_attr=None):
         return self.propagate(edge_index, x=x, edge_attr=edge_attr)
 
-    def message(self, x_i, x_j, edge_attr):
-        return self.nn(torch.cat([x_i, x_j - x_i, edge_attr], dim=-1))
+    def message(self, x_i, x_j, edge_attr, index, ptr, size_i):
+        if edge_attr is not None:
+            msg = self.nn(torch.cat([x_i, x_j - x_i, edge_attr], dim=-1))
+        else:
+            msg = self.nn(torch.cat([x_i, x_j - x_i], dim=-1))
+        if self.attn_nn is not None:
+            w = softmax(self.attn_nn(msg), index, ptr, size_i)
+            msg = w * msg
+        return msg
 
 
 class GraphMETNetworkEdgeFeatures(nn.Module):
-    def __init__ (self, continuous_dim, cat_dim, norm, output_dim=1, hidden_dim=32, conv_depth=1, use_edge_features=False):
+    def __init__ (self, continuous_dim, cat_dim, norm, output_dim=1, hidden_dim=32, conv_depth=1, use_edge_features=False, use_attentive_pooling=False):
         super(GraphMETNetworkEdgeFeatures, self).__init__()
 
         self.datanorm = norm
         self.use_edge_features = use_edge_features
+        self.use_attentive_pooling = use_attentive_pooling
         # ParticleNeXt normalizes edge features before the edge MLP; the raw log-features
         # have nonzero means and ~2x the std of the BatchNorm'd node embeddings, so without
         # this they dominate/destabilize the message. Static graph => normalize once.
@@ -61,12 +74,16 @@ class GraphMETNetworkEdgeFeatures(nn.Module):
                                        )
         self.bn_all = nn.BatchNorm1d(hidden_dim)
 
+        # attentive pooling also needs the custom conv (EdgeConv only does max aggregation)
+        use_custom_conv = self.use_edge_features or self.use_attentive_pooling
         self.conv_continuous = nn.ModuleList()
         for i in range(conv_depth):
             self.conv_continuous.append(nn.ModuleList())
-            if self.use_edge_features:
-                mesg = nn.Sequential(nn.Linear(2*hidden_dim + N_EDGE_FEATURES, hidden_dim))
-                self.conv_continuous[-1].append(EdgeFeatureConv(nn=mesg))
+            if use_custom_conv:
+                in_dim = 2*hidden_dim + (N_EDGE_FEATURES if self.use_edge_features else 0)
+                mesg = nn.Sequential(nn.Linear(in_dim, hidden_dim))
+                attn_nn = nn.Linear(hidden_dim, 1) if self.use_attentive_pooling else None
+                self.conv_continuous[-1].append(EdgeFeatureConv(nn=mesg, attn_nn=attn_nn))
             else:
                 mesg = nn.Sequential(nn.Linear(2*hidden_dim, hidden_dim))
                 self.conv_continuous[-1].append(EdgeConv(nn=mesg).jittable())
@@ -101,6 +118,7 @@ class GraphMETNetworkEdgeFeatures(nn.Module):
         #norm = torch.tensor([1./2950., 1./2950, 1./2950, 1., 1., 1.]).to(device)
 
         # edge features use raw (physical) pt, eta, phi -- compute before normalization
+        edge_attr = None
         if self.use_edge_features:
             edge_attr = self.edge_bn(self.compute_edge_features(x_cont, edge_index))
 
@@ -124,7 +142,7 @@ class GraphMETNetworkEdgeFeatures(nn.Module):
             #dynamic, evolving knn
             #emb = emb + co_conv[1](co_conv[0](emb, knn_graph(emb, k=20, batch=batch, loop=True)))
             #static
-            if self.use_edge_features:
+            if self.use_edge_features or self.use_attentive_pooling:
                 emb = emb + co_conv[1](co_conv[0](emb, edge_index, edge_attr))
             else:
                 emb = emb + co_conv[1](co_conv[0](emb, edge_index))

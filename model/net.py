@@ -18,14 +18,16 @@ Change from DeepMETv2
 '''
 
 class Net(nn.Module):
-    def __init__(self, continuous_dim, categorical_dim, norm, hidden_dim=32, conv_depth=4, activation='relu', use_edge_features=False):
+    def __init__(self, continuous_dim, categorical_dim, norm, hidden_dim=32, conv_depth=4, activation='relu', use_edge_features=False, use_attentive_pooling=False):
         super(Net, self).__init__()
 
         self.activation = activation
-        if use_edge_features:
+        if use_edge_features or use_attentive_pooling:
             self.graphnet = GraphMETNetworkEdgeFeatures(continuous_dim, categorical_dim, norm,
                                                         output_dim=1, hidden_dim=hidden_dim,
-                                                        conv_depth=conv_depth, use_edge_features=True)
+                                                        conv_depth=conv_depth,
+                                                        use_edge_features=use_edge_features,
+                                                        use_attentive_pooling=use_attentive_pooling)
         else:
             self.graphnet = GraphMETNetwork(continuous_dim, categorical_dim, norm,
                                             output_dim=1, hidden_dim=hidden_dim,
